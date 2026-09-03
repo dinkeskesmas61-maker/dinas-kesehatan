@@ -1,24 +1,26 @@
 // components/anc/AncTable.jsx
 // Komponen UI terpisah yang merakit AncTableHeader, AncTableBody, dan Footer Summary secara modular.
 
-'use client';
+"use client";
 
-import { useMemo } from 'react';
-import AncTableHeader from './AncTableHeader';
-import AncTableBody from './AncTableBody';
-import { ANC_FIELDS, calculateAncSummary } from '@/constants/ancFields';
-import { STATUS_FIELD, STATUS_SUBMITTED } from '@/lib/anc/ancConfig';
+import { useMemo } from "react";
+import AncTableHeader from "./AncTableHeader";
+import AncTableBody from "./AncTableBody";
+import { ANC_FIELDS, calculateAncSummary } from "@/constants/ancFields";
+import { STATUS_FIELD, STATUS_SUBMITTED } from "@/lib/anc/ancConfig";
 
 export default function AncTable({
   reportList = [],
   puskesmasList,
-  searchQuery = '',
+  searchQuery = "",
   zoomLevel = 100,
   onRowClick,
 }) {
   const dataList = puskesmasList || reportList;
   const summary = useMemo(() => calculateAncSummary(dataList), [dataList]);
-  const jumlahSubmitted = dataList.filter((r) => r[STATUS_FIELD] === STATUS_SUBMITTED).length;
+  const jumlahSubmitted = dataList.filter(
+    (r) => r[STATUS_FIELD] === STATUS_SUBMITTED,
+  ).length;
   const totalPuskesmas = dataList.length;
 
   return (
@@ -26,9 +28,11 @@ export default function AncTable({
       <div className="overflow-x-auto max-h-[600px] relative">
         <div
           style={{
-            transform: zoomLevel !== 100 ? `scale(${zoomLevel / 100})` : undefined,
-            transformOrigin: 'top left',
-            width: zoomLevel < 100 ? `${100 / (zoomLevel / 100)}%` : 'max-content',
+            transform:
+              zoomLevel !== 100 ? `scale(${zoomLevel / 100})` : undefined,
+            transformOrigin: "top left",
+            width:
+              zoomLevel < 100 ? `${100 / (zoomLevel / 100)}%` : "max-content",
           }}
           className="transition-transform duration-150 ease-out"
         >
@@ -37,7 +41,11 @@ export default function AncTable({
             <AncTableHeader />
 
             {/* Body Looping Dinamis ANC_FIELDS */}
-            <AncTableBody puskesmasList={dataList} searchQuery={searchQuery} onRowClick={onRowClick} />
+            <AncTableBody
+              puskesmasList={dataList}
+              searchQuery={searchQuery}
+              onRowClick={onRowClick}
+            />
 
             {/* Footer Summary (Total SUM & Rata-rata AVG Kota Baubau) */}
             <tfoot className="bg-surface-container-high font-bold border-t-2 border-primary text-on-surface">
@@ -50,9 +58,14 @@ export default function AncTable({
                 </td>
                 {ANC_FIELDS.map((field) => {
                   const sumVal = summary.totals[field.key] || 0;
-                  const formatted = field.isPercent ? `${sumVal}%` : sumVal.toLocaleString('id-ID');
+                  const formatted = field.isPercent
+                    ? `${sumVal}%`
+                    : sumVal.toLocaleString("id-ID");
                   return (
-                    <td key={field.key} className="p-2.5 text-right font-mono text-xs font-bold border-r border-outline-variant">
+                    <td
+                      key={field.key}
+                      className="p-2.5 text-right font-mono text-xs font-bold border-r border-outline-variant"
+                    >
                       {formatted}
                     </td>
                   );
@@ -67,9 +80,14 @@ export default function AncTable({
                 </td>
                 {ANC_FIELDS.map((field) => {
                   const avgVal = summary.averages[field.key] || 0;
-                  const formatted = field.isPercent ? `${avgVal}%` : avgVal.toLocaleString('id-ID');
+                  const formatted = field.isPercent
+                    ? `${avgVal}%`
+                    : avgVal.toLocaleString("id-ID");
                   return (
-                    <td key={field.key} className="p-2 text-right font-mono border-r border-outline-variant">
+                    <td
+                      key={field.key}
+                      className="p-2 text-right font-mono border-r border-outline-variant"
+                    >
                       {formatted}
                     </td>
                   );

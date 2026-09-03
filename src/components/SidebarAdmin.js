@@ -24,7 +24,9 @@ export default function AdminSidebar({ activeTab }) {
       <div className="px-gutter mb-8 flex flex-col gap-2">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-primary-container rounded-lg flex items-center justify-center text-on-primary-container">
-            <span className="material-symbols-outlined">admin_panel_settings</span>
+            <span className="material-symbols-outlined">
+              admin_panel_settings
+            </span>
           </div>
           <div>
             <h1 className="text-headline-sm font-headline-sm font-bold text-primary dark:text-primary-fixed-dim">
@@ -39,7 +41,6 @@ export default function AdminSidebar({ activeTab }) {
 
       {/* Navigation Links untuk Admin */}
       <div className="flex flex-col px-4 gap-unit">
-
         {/* Pengaturan Periode Pelaporan */}
         <Link
           className={`flex items-center gap-3 px-4 py-3 rounded-lg font-label-md text-label-md transition-all ${
@@ -66,6 +67,19 @@ export default function AdminSidebar({ activeTab }) {
           <span>Lihat Form ANC</span>
         </Link>
 
+        {/* Menu Peninjau Data Ibu Nifas (PNC) */}
+        <Link
+          className={`flex items-center gap-3 px-4 py-3 rounded-lg font-label-md text-label-md transition-all ${
+            getIsActive("pnc", "/admin/dataPnc")
+              ? "bg-primary-container text-on-primary-container font-bold scale-95"
+              : "text-on-surface-variant dark:text-surface-variant hover:bg-surface-container-high"
+          }`}
+          href="/admin/dataPnc"
+        >
+          <span className="material-symbols-outlined">child_care</span>
+          <span>Lihat Form PNC</span>
+        </Link>
+
         {/* Kelola Pengguna / User */}
         <Link
           className={`flex items-center gap-3 px-4 py-3 rounded-lg font-label-md text-label-md transition-all ${
@@ -77,6 +91,19 @@ export default function AdminSidebar({ activeTab }) {
         >
           <span className="material-symbols-outlined">group</span>
           <span>Manajemen User</span>
+        </Link>
+
+          {/* Kelola Sasaran Puskesmas */}
+        <Link
+          className={`flex items-center gap-3 px-4 py-3 rounded-lg font-label-md text-label-md transition-all ${
+            getIsActive("users", "/admin/petugas")
+              ? "bg-primary-container text-on-primary-container font-bold scale-95"
+              : "text-on-surface-variant dark:text-surface-variant hover:bg-surface-container-high"
+          }`}
+          href="/admin/dataSasaran"
+        >
+          <span className="material-symbols-outlined">group</span>
+          <span>Sasaran Puskemas</span>
         </Link>
 
       </div>

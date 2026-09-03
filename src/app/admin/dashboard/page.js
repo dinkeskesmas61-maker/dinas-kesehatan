@@ -6,7 +6,7 @@ import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { getActivePeriode, namaBulan as getNamaBulan } from '@/lib/anc/ancConfig';
-import RekapKelengkapanCard from '@/components/anc/RekapKelengkapanCard';
+import RekapKelengkapanCard from '@/components/shared/RekapKelengkapanCard';
 
 export default function AdminDashboardPage() {
   const router = useRouter();

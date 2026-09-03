@@ -5,12 +5,13 @@ import {
   collection,
   doc,
   getDocs,
-  getDoc,
   writeBatch,
   serverTimestamp,
 } from 'firebase/firestore';
 import { DAFTAR_BULAN, isPeriodeLocked, STATUS_TERKUNCI, STATUS_TERBUKA } from '@/constants/periode';
 import { TEMPLATE_KOLOM_ANC, getAncCollectionName } from '@/lib/anc/ancConfig';
+import { TEMPLATE_KOLOM_PNC, getPncCollectionName } from '@/lib/pnc/pncConfig';
+import { checkKelengkapanGabungan, checkFullYearCompleteGabungan, DAFTAR_MODUL } from '@/lib/periode/kelengkapanModul';
 
 export function useManajemenPeriode(initialYear = String(new Date().getFullYear())) {
   const [selectedYear, setSelectedYear] = useState(initialYear);
@@ -23,26 +24,18 @@ export function useManajemenPeriode(initialYear = String(new Date().getFullYear(
   const fetchPeriodData = async () => {
     setLoading(true);
     try {
-      const activeDoc = await getDoc(doc(db, 'settings', 'active_period'));
-      if (activeDoc.exists() && activeDoc.data().tahun === selectedYear) {
-        setActiveMonth(activeDoc.data().bulan);
+      const activeDoc = await getDocFromSettings('active_period');
+      if (activeDoc && activeDoc.tahun === selectedYear) {
+        setActiveMonth(activeDoc.bulan);
       } else {
         setActiveMonth(null);
       }
 
-      const openedDoc = await getDoc(doc(db, 'settings', 'opened_periods'));
-      if (openedDoc.exists() && openedDoc.data()[selectedYear]) {
-        setOpenedMonths(openedDoc.data()[selectedYear]);
-      } else {
-        setOpenedMonths([]);
-      }
+      const openedDoc = await getDocFromSettings('opened_periods');
+      setOpenedMonths(openedDoc?.[selectedYear] || []);
 
-      const statusDoc = await getDoc(doc(db, 'settings', 'period_statuses'));
-      if (statusDoc.exists()) {
-        setStatusPeriodeMap(statusDoc.data());
-      } else {
-        setStatusPeriodeMap({});
-      }
+      const statusDoc = await getDocFromSettings('period_statuses');
+      setStatusPeriodeMap(statusDoc || {});
     } catch (err) {
       console.error('Gagal mengambil data periode:', err);
     } finally {
@@ -50,15 +43,25 @@ export function useManajemenPeriode(initialYear = String(new Date().getFullYear(
     }
   };
 
+  // Helper kecil biar tidak menulis getDoc(doc(db,'settings', x)) berulang-ulang
+  const getDocFromSettings = async (settingId) => {
+    const { doc: docFn, getDoc: getDocFn } = await import('firebase/firestore');
+    const snap = await getDocFn(docFn(db, 'settings', settingId));
+    return snap.exists() ? snap.data() : null;
+  };
+
   useEffect(() => {
     fetchPeriodData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedYear]);
 
-  // Tambah Periode Baru (M + 1)
+  // Tambah Periode Baru (M + 1) — sekarang cek kelengkapan GABUNGAN semua modul
   const handleCreateNextPeriod = async () => {
     setProcessing(true);
     try {
       let nextMonthId = '01';
+      let prevMonthId = null;
+
       if (openedMonths.length > 0) {
         const lastOpened = Math.max(...openedMonths.map((m) => parseInt(m, 10)));
         if (lastOpened >= 12) {
@@ -66,7 +69,36 @@ export function useManajemenPeriode(initialYear = String(new Date().getFullYear(
           setProcessing(false);
           return;
         }
+        prevMonthId = String(lastOpened).padStart(2, '0');
         nextMonthId = String(lastOpened + 1).padStart(2, '0');
+      }
+
+      // ---- VALIDASI: bulan sebelumnya harus 100% lengkap SEMUA MODUL dulu ----
+      if (prevMonthId) {
+        const { allSubmitted, noPuskesmas, list } = await checkKelengkapanGabungan(selectedYear, prevMonthId);
+        const namaBulanSebelumnya = DAFTAR_BULAN.find((b) => b.id === prevMonthId)?.nama || prevMonthId;
+
+        if (noPuskesmas) {
+          alert('Belum ada data Puskesmas terdaftar di sistem. Tambahkan Puskesmas terlebih dahulu.');
+          setProcessing(false);
+          return;
+        }
+
+        if (!allSubmitted) {
+          const detail = list
+            .filter((p) => !p.lengkapSemuaModul)
+            .map((p) => {
+              const modulBelum = DAFTAR_MODUL.filter((m) => !p.perModul[m.key]).map((m) => m.label);
+              return `• ${p.nama}: belum submit ${modulBelum.join(', ')}`;
+            })
+            .join('\n');
+
+          alert(
+            `Tidak bisa membuka bulan berikutnya.\n\nMasih ada Puskesmas yang belum menyelesaikan SEMUA modul (ANC & PNC) untuk periode ${namaBulanSebelumnya} ${selectedYear}:\n\n${detail}\n\nPastikan semua modul sudah di-submit final sebelum membuka bulan baru.`
+          );
+          setProcessing(false);
+          return;
+        }
       }
 
       const namaBulanStr = DAFTAR_BULAN.find((b) => b.id === nextMonthId)?.nama || nextMonthId;
@@ -76,13 +108,14 @@ export function useManajemenPeriode(initialYear = String(new Date().getFullYear(
       }
 
       const periodId = `${selectedYear}-${nextMonthId}`;
-      const collectionName = getAncCollectionName(selectedYear, nextMonthId);
+      const ancCollectionName = getAncCollectionName(selectedYear, nextMonthId);
+      const pncCollectionName = getPncCollectionName(selectedYear, nextMonthId);
       const namaPeriode = `Periode ${namaBulanStr} ${selectedYear}`;
       const batch = writeBatch(db);
 
       batch.set(
         doc(db, 'settings', 'active_period'),
-        { periodId, collectionName, bulan: nextMonthId, tahun: selectedYear, namaPeriode, status: 'active', updatedAt: serverTimestamp() },
+        { periodId, collectionName: ancCollectionName, bulan: nextMonthId, tahun: selectedYear, namaPeriode, status: 'active', updatedAt: serverTimestamp() },
         { merge: true }
       );
 
@@ -102,18 +135,33 @@ export function useManajemenPeriode(initialYear = String(new Date().getFullYear(
       if (!puskesmasSnap.empty) {
         puskesmasSnap.forEach((pkmDoc) => {
           const pkmData = pkmDoc.data();
+          const dataUmum = {
+            puskesmasId: pkmDoc.id,
+            namaPuskesmas: pkmData.nama || pkmDoc.id,
+            kecamatan: pkmData.kecamatan || '',
+            statusReport: 'draft',
+            updatedAt: serverTimestamp(),
+          };
+
+          // Inisialisasi dokumen ANC
+          // jumlahPenduduk, sasaranBumil, sasaranWus semuanya disalin dari data master
+          // puskesmas ke dokumen ANC periode baru (sasaranBulin TIDAK di sini, itu hanya di PNC)
           batch.set(
-            doc(db, collectionName, pkmDoc.id),
+            doc(db, ancCollectionName, pkmDoc.id),
             {
               ...TEMPLATE_KOLOM_ANC,
-              puskesmasId: pkmDoc.id,
-              namaPuskesmas: pkmData.nama || pkmDoc.id,
-              kecamatan: pkmData.kecamatan || '',
+              ...dataUmum,
+              jumlahPenduduk: pkmData.jumlahPenduduk || 0,
               sasaranBumil: pkmData.sasaranBumil || 0,
-              sasaranBulin: pkmData.sasaranBulin || 0,
-              statusReport: 'draft',
-              updatedAt: serverTimestamp(),
+              sasaranWus: pkmData.sasaranWus || 0,
             },
+            { merge: true }
+          );
+
+          // Inisialisasi dokumen PNC
+          batch.set(
+            doc(db, pncCollectionName, pkmDoc.id),
+            { ...TEMPLATE_KOLOM_PNC, ...dataUmum, sasaranBulin: pkmData.sasaranBulin || 0 },
             { merge: true }
           );
         });
@@ -121,7 +169,7 @@ export function useManajemenPeriode(initialYear = String(new Date().getFullYear(
 
       await batch.commit();
       await fetchPeriodData();
-      alert(`Berhasil membuat & membuka ${namaPeriode}!`);
+      alert(`Berhasil membuat & membuka ${namaPeriode} (ANC & PNC)!`);
     } catch (err) {
       console.error('Error menambah periode:', err);
       alert('Gagal menambah periode: ' + err.message);
@@ -130,7 +178,7 @@ export function useManajemenPeriode(initialYear = String(new Date().getFullYear(
     }
   };
 
-  // Toggle Buka / Tutup Periode (Lock / Unlock)
+  // Toggle Buka / Tutup Periode (Lock / Unlock) — tidak berubah, tetap per key periode
   const handleToggleLock = async (bulanId) => {
     const periodId = `${selectedYear}-${bulanId}`;
     const currentStatus = statusPeriodeMap[periodId] || STATUS_TERBUKA;
@@ -158,6 +206,9 @@ export function useManajemenPeriode(initialYear = String(new Date().getFullYear(
     }
   };
 
+  // Cek kelengkapan tahun penuh (gabungan semua modul), dipakai sebelum ganti tahun
+  const checkTahunLengkap = async (tahun) => checkFullYearCompleteGabungan(tahun);
+
   const getNextMonthLabel = () => {
     if (openedMonths.length === 0) return 'Januari';
     const lastOpened = Math.max(...openedMonths.map((m) => parseInt(m, 10)));
@@ -175,6 +226,7 @@ export function useManajemenPeriode(initialYear = String(new Date().getFullYear(
     processing,
     handleCreateNextPeriod,
     handleToggleLock,
+    checkTahunLengkap,
     nextMonthName: getNextMonthLabel(),
   };
 }
