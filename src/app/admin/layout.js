@@ -1,7 +1,7 @@
 "use client";
 
-import SidebarAdmin from "@/components/SidebarAdmin";
-import TopNavAdmin from "@/components/TopNavAdmin";
+import SidebarAdmin from "@/components/nav/SidebarAdmin";
+import TopNavAdmin from "@/components/nav/TopNavAdmin";
 
 export default function DashboardLayout({ children }) {
   return (

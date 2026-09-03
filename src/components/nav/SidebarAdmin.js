@@ -6,23 +6,27 @@ import { useRouter, usePathname } from "next/navigation";
 import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 
-// ---- Struktur menu Petugas Puskesmas / Kepala Puskesmas ----
-// Dikelompokkan per AREA PROGRAM (Data Ibu, Data Anak, dst), bukan per jenis
-// laporan — supaya gampang nambah area baru (mis. Data Anak) tanpa bongkar
-// struktur yang sudah ada.
-const MENU_PETUGAS = [
-  { type: "link", key: "dashboard", label: "Dashboard", href: "/dashboard", icon: "dashboard" },
+// ---- Struktur menu Admin Dinas Kesehatan ----
+// Dikelompokkan per AREA PROGRAM (Data Ibu, Data Anak, dst) — pola identik
+// dengan Sidebar.jsx (Petugas), supaya konsisten & gampang nambah area baru.
+// "Periode Pelaporan" & "Manajemen User" SENGAJA tetap link berdiri sendiri
+// (bukan bagian dari group manapun), karena keduanya adalah fungsi
+// manajemen inti Admin yang dipakai lintas semua program, bukan spesifik
+// satu area data.
+const MENU_ADMIN = [
+  { type: "link", key: "dashboard", label: "Dashboard", href: "/admin/dashboard", icon: "dashboard" },
+  { type: "link", key: "periode", label: "Periode Pelaporan", href: "/admin/periode", icon: "event_available" },
   {
     type: "group",
     key: "data-ibu",
     label: "Data Ibu",
     icon: "pregnant_woman",
     children: [
-      { key: "anc", label: "ANC", href: "/dashboard/anc", icon: "monitor_heart" },
-      { key: "pnc", label: "PNC", href: "/dashboard/pnc", icon: "healing" },
-      { key: "kematian", label: "Kematian Ibu", href: "/dashboard/kematian", icon: "heart_broken" },
-      { key: "anc-terpadu", label: "ANC Terpadu", href: "/dashboard/anc-terpadu", icon: "biotech" },
-      { key: "sdm", label: "SDM", href: "/dashboard/sdm", icon: "groups" },
+      { key: "rekap-anc", label: "Lihat Form ANC", href: "/admin/dataAnc", icon: "monitor_heart" },
+      { key: "rekap-pnc", label: "Lihat Form PNC", href: "/admin/dataPnc", icon: "healing" },
+      { key: "rekap-anct", label: "Lihat Form ANC Terpadu", href: "/admin/dataAnct", icon: "biotech" },
+      { key: "rekap-kematian", label: "Data Kematian Ibu", href: "/admin/dataKematian", icon: "heart_broken" },
+      { key: "sasaran", label: "Sasaran Puskesmas", href: "/admin/dataSasaran", icon: "flag" },
     ],
   },
   {
@@ -35,62 +39,31 @@ const MENU_PETUGAS = [
       { key: "anak-segera", label: "Segera Hadir", href: "#", icon: "hourglass_empty", disabled: true },
     ],
   },
-  { type: "link", key: "profil", label: "Profil & Pengaturan", href: "/dashboard/profil", icon: "person" },
-];
-
-// ---- Struktur menu Admin Dinas Kesehatan ----
-const MENU_ADMIN = [
-  { type: "link", key: "dashboard", label: "Dashboard", href: "/admin/dashboard", icon: "dashboard" },
-  {
-    type: "group",
-    key: "manajemen",
-    label: "Manajemen",
-    icon: "admin_panel_settings",
-    children: [
-      { key: "periode", label: "Pengaturan Periode", href: "/admin/periode", icon: "event_available" },
-      { key: "petugas", label: "Manajemen User", href: "/admin/petugas", icon: "manage_accounts" },
-    ],
-  },
-  {
-    type: "group",
-    key: "data-ibu",
-    label: "Data Ibu",
-    icon: "pregnant_woman",
-    children: [
-      { key: "rekap-anc", label: "Rekap ANC", href: "/admin/rekap/anc", icon: "monitor_heart" },
-      { key: "rekap-pnc", label: "Rekap PNC", href: "/admin/rekap/pnc", icon: "healing" },
-      { key: "rekap-kematian", label: "Rekap Kematian Ibu", href: "/admin/rekap/kematian", icon: "heart_broken" },
-      { key: "rekap-anc-terpadu", label: "Rekap ANC Terpadu", href: "/admin/rekap/anc-terpadu", icon: "biotech" },
-      { key: "sdm", label: "Kelola SDM", href: "/admin/sdm", icon: "groups" },
-      { key: "sasaran", label: "Kelola Sasaran", href: "/admin/sasaran", icon: "target" },
-    ],
-  },
-  {
-    type: "group",
-    key: "data-anak",
-    label: "Data Anak",
-    icon: "child_care",
-    children: [
-      { key: "anak-segera", label: "Segera Hadir", href: "#", icon: "hourglass_empty", disabled: true },
-    ],
-  },
+  { type: "link", key: "petugas", label: "Manajemen User", href: "/admin/petugas", icon: "manage_accounts" },
   { type: "link", key: "profil", label: "Profil & Pengaturan", href: "/admin/profil", icon: "person" },
 ];
 
-export default function Sidebar({ role = "petugas" }) {
+export default function AdminSidebar({ activeTab }) {
   const router = useRouter();
   const pathname = usePathname();
 
-  const menuItems = role === "admin" ? MENU_ADMIN : MENU_PETUGAS;
-  const brandLabel = role === "admin" ? "Admin Dinkes Baubau" : "Dinkes Baubau";
-
   const [openGroups, setOpenGroups] = useState({});
+
+  // Memeriksa URL secara dinamis agar match 100% (dan tetap kompatibel
+  // dengan prop `activeTab` lama kalau ada halaman yang masih mengirimnya)
+  const getIsActive = (tabKey, targetPath) => {
+    if (activeTab) return activeTab === tabKey;
+    if (targetPath === "/admin/dashboard") {
+      return pathname === "/admin/dashboard" || pathname === "/admin";
+    }
+    return pathname === targetPath || pathname.startsWith(`${targetPath}/`);
+  };
 
   // Otomatis buka group yang mengandung halaman aktif saat pertama kali render
   useEffect(() => {
     const initialOpen = {};
-    menuItems.forEach((item) => {
-      if (item.type === "group" && item.children.some((c) => c.href === pathname)) {
+    MENU_ADMIN.forEach((item) => {
+      if (item.type === "group" && item.children.some((c) => getIsActive(c.key, c.href))) {
         initialOpen[item.key] = true;
       }
     });
@@ -113,28 +86,30 @@ export default function Sidebar({ role = "petugas" }) {
 
   return (
     <nav className="bg-surface-container-low dark:bg-surface-container-lowest border-r border-outline-variant dark:border-outline shadow-none flex flex-col h-screen fixed left-0 top-0 py-stack-gap z-50 w-64 overflow-y-auto">
-      {/* Header Brand */}
+      {/* Header Brand Admin */}
       <div className="px-gutter mb-8 flex flex-col gap-2">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-primary-container rounded-lg flex items-center justify-center text-on-primary-container">
-            <span className="material-symbols-outlined">local_hospital</span>
+            <span className="material-symbols-outlined">
+              admin_panel_settings
+            </span>
           </div>
           <div>
             <h1 className="text-headline-sm font-headline-sm font-bold text-primary dark:text-primary-fixed-dim">
-              {brandLabel}
+              Dinkes Baubau
             </h1>
           </div>
         </div>
-        <p className="font-label-md text-label-md text-on-surface-variant">
-          Health Data Management
+        <p className="font-label-md text-label-md text-on-surface-variant font-medium">
+          Panel Administrator
         </p>
       </div>
 
       {/* Navigation */}
       <div className="flex flex-col px-4 gap-1 flex-1">
-        {menuItems.map((item) => {
+        {MENU_ADMIN.map((item) => {
           if (item.type === "link") {
-            const active = pathname === item.href;
+            const active = getIsActive(item.key, item.href);
             return (
               <Link key={item.key} href={item.href} className={linkClass(active)}>
                 <span className="material-symbols-outlined">{item.icon}</span>
@@ -145,7 +120,7 @@ export default function Sidebar({ role = "petugas" }) {
 
           // type === "group"
           const isOpen = !!openGroups[item.key];
-          const hasActiveChild = item.children.some((c) => c.href === pathname);
+          const hasActiveChild = item.children.some((c) => getIsActive(c.key, c.href));
 
           return (
             <div key={item.key} className="flex flex-col">
@@ -172,7 +147,7 @@ export default function Sidebar({ role = "petugas" }) {
               {isOpen && (
                 <div className="flex flex-col gap-0.5 mt-1 ml-3 pl-3 border-l border-outline-variant">
                   {item.children.map((child) => {
-                    const active = pathname === child.href;
+                    const active = getIsActive(child.key, child.href);
                     return (
                       <Link
                         key={child.key}
